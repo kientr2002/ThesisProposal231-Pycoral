@@ -1,7 +1,4 @@
 0 Nothing
-1 Nothing1
-2 Stop
-3 goBack
-4 goToward
-5 goLeft
-6 goRight
+1 Red
+2 Yellow
+3 Green
