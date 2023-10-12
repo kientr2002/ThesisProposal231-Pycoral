@@ -25,7 +25,7 @@ labelPath = 'labels.txt'
 
 font = cv2.FONT_HERSHEY_SIMPLEX
 font_scale = 0.5
-font_color = (0, 0, 0)  # Text color (Yellow)
+font_color = (55, 85, 255)  # Text color (Yellow)
 font_thickness = 1
 
 # Create a folder "captured_imaged"
@@ -37,8 +37,11 @@ counter = 0  # Count Images with the detection over 0.8
 now_Object = ""
 previous_Object = ""
 label_now = ""
+label_previous = ""
+time_detection_flag = 0
 # Biến đếm giây
 seconds = 0
+
 #The conditional of detection objects
 
 # This function takes in a TFLite Interptere and Image, and returns classifications
@@ -55,8 +58,9 @@ def count_seconds():
         seconds += 1
 
 def Counter(input):
-    global counter,now_Object,previous_Object, label_now
+    global counter,now_Object,previous_Object, label_now, label_previous, time_detection_flag
     if counter == 0:
+        time_detection_flag = 0
         now_Object = input
         counter = counter + 1
     elif counter > 0 and counter < 5:
@@ -72,10 +76,13 @@ def Counter(input):
         previous_Object = now_Object
         now_Object = input
         if now_Object == previous_Object:
+            label_previous = label_now
             label_now = now_Object
+            time_detection_flag = 1
         now_Object = ""
         previous_Object = ""
         counter = 0
+
 
 count_thread = threading.Thread(target=count_seconds)
 count_thread.daemon = True
@@ -93,6 +100,10 @@ def main():
     frame_times = []
     CPU_Usages = []
     Scores = []
+    Times = []
+    Label_of_Times = []
+    count_Times_data = []
+    count_Time_data = 0
     pcr.adapters.classify
     while cap.isOpened():
         ret, frame = cap.read()
@@ -105,7 +116,6 @@ def main():
         results = classifyImage(interpreter, frame)
         print(f'Label: {labels[results[0].id]}, Score: {results[0].score}')
         print(f'Label detected: {label_now} and counter: {counter}')
-        print(seconds)
         text = f'Label: {labels[results[0].id]}, Score: {results[0].score:.2f}'
 
         fps.update()
@@ -125,20 +135,24 @@ def main():
         print(f'FPS: {fps.fps():.2f}')
         if results[0].score > 0.8:  # Kiểm tra xem có đối tượng được phát hiện hay không
             # Tạo tên tệp tin duy nhất dựa trên thời gian hiện tại
-            timestamp = int(time.time())
-            image_filename = os.path.join(output_dir, f'captured_{timestamp}.jpg')
-            # Lưu ảnh từ frame
-            cv2.imwrite(image_filename, frame)
-            print(f'Đã chụp ảnh và lưu tại: {image_filename}')
             #Counter Detection
-            input = labels[results[0].id]
-            Counter(input)
+            Counter(labels[results[0].id])
         else:
             counter = 0
             now_Object = ""
             previous_Object = ""
             label_now = ""
-
+        if time_detection_flag == 1 and label_previous != label_now:
+            Label_of_Times.append(label_now)
+            Times.append(seconds)
+            count_Time_data = count_Time_data + 1
+            count_Times_data.append(count_Time_data)
+        timestamp = int(time.time())
+        image_filename = os.path.join(output_dir, f'captured_{timestamp}.jpg')
+        # Lưu ảnh từ frame
+        cv2.imwrite(image_filename, frame)
+        print(f'Đã chụp ảnh và lưu tại: {image_filename}')
+        print('-------------------------------------------------------------')
         if cv2.waitKey(1) & 0xFF == ord('q'):
             break
         key = cv2.waitKey(1) & 0xFF
@@ -147,17 +161,53 @@ def main():
             break
     cap.release()
     cv2.destroyAllWindows()
-    #Scores
-    plt.plot(Scores)
-    plt.xlabel('Khung hình')
-    plt.ylabel('Score')
-    plt.title('Thông số')
-    plt.show()
     #FPS
     plt.plot(frame_times)
     plt.xlabel('Khung hình')
     plt.ylabel('FPS')
-    plt.title('Thông số')
+    plt.title('Frame per Second')
     plt.show()
+    #CPU Usages
+    plt.plot(CPU_Usages)
+    plt.xlabel('Khung hình')
+    plt.ylabel('%')
+    plt.title('CPU Usages')
+    plt.show()
+    #Scores
+    plt.plot(Scores)
+    plt.xlabel('Khung hình')
+    plt.ylabel('Score')
+    plt.title('Accuracy')
+    plt.axhline(y=0.8, color='red', linestyle='--', label='y = 0.8')
+    plt.show()
+    #Time to detection
+    plt.scatter(count_Times_data, Times)
+    plt.xlabel('Khung hình')
+    plt.ylabel('second')
+    plt.title('Time Detection')
+    # Vẽ chiếu dọc từ các điểm đến trục x
+    for i in range(len(count_Times_data)):
+        plt.vlines(count_Times_data[i], ymin=0, ymax=Times[i], colors='blue', linestyle='--')
+
+    # Vẽ chiếu ngang từ các điểm đến trục y
+    for i in range(len(Times)):
+        color = "black"
+        if Label_of_Times[i] == "Nothing":
+            color = 'black'
+        elif Label_of_Times[i] == "Red":
+            color = 'red'
+        elif Label_of_Times[i] == "Yellow":
+            color = 'yellow'
+        elif Label_of_Times[i] == "Green":
+            color = 'blue'
+        plt.hlines(Times[i], xmin=0, xmax=count_Times_data[i], colors=color, linestyle='--')
+    # Hiển thị giá trị cụ thể trên từng điểm
+    for i in range(len(count_Times_data)):
+        if Times[i] != Times[i - 1]:
+            plt.annotate(f'({count_Times_data[i]}, {Times[i]})', (count_Times_data[i], Times[i]),
+                         textcoords="offset points", xytext=(0, 10), ha='center')
+
+    plt.show()
+
 if __name__ == '__main__':
     main()
